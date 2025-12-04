@@ -105,14 +105,15 @@ class Snake:
     def right(self):
         self.change_direction("right")
 
-    def grow(self):
+    def grow(self,count=1):
         # add a new segment at the position of the last segment
-        tail = self.segments[-1]
-        new_seg = self._create_segment((tail.xcor(), tail.ycor()))
-        opp_dir = self.opposites[self.direction]
-        new_seg.setheading(opp_dir)
-        new_seg.forward(self.MOVE_DISTANCE)
-        self.segments.append(new_seg)
+        for _ in range(count):
+            tail = self.segments[-1]
+            new_seg = self._create_segment((tail.xcor(), tail.ycor()))
+            opp_dir = self.opposites[self.direction]
+            new_seg.setheading(opp_dir)
+            new_seg.forward(self.MOVE_DISTANCE)
+            self.segments.append(new_seg)
     
     def shrink(self):
         if len(self.segments) > 1:

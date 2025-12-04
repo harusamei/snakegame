@@ -7,7 +7,9 @@ import sys
 from snake import Snake
 from food import Food
 
+
 class Game:
+    
     def __init__(self, config_path=None):
         
         config = configparser.ConfigParser()
@@ -16,16 +18,17 @@ class Game:
         else:
             # defaults
             config.read_dict({
-                "screen": {"width": "600", "height": "600", "bg_color": "black"},
-                "snake": {"speed": "0.12", "snake_color": "green", "length": "5", "food_color": "red"},
+                "screen": {"width": 800, "height": 600, "bg_color": "black"},
+                "snake": {"sleep": 0.12, "snake_color": "green", "length": 5, 
+                          "food_color": "red"}
             })
 
         self.width = int(config["screen"]["width"])
         self.height = int(config["screen"]["height"])
         self.bg_color = config["screen"].get("bg_color", "black")
-        self.delay = float(config["snake"].get("speed", 0.12))
+        self.sleep = float(config["snake"].get("sleep", 0.12))
         snake_color = config["snake"].get("snake_color", "green")
-        snake_length = config["snake"].get('length', 5)
+        snake_length = int(config["snake"].get('length', 5))
         food_color = config["snake"].get("food_color", "red")
 
         self.screen = turtle.Screen()
@@ -35,19 +38,22 @@ class Game:
         # 关闭自动刷屏
         self.screen.tracer(0)
 
-        self.snake = Snake(color=snake_color, length = snake_length)
+        self.snake = Snake(color=snake_color, length=snake_length)
         # bounds for food placement slightly smaller than screen half-size
-        self.food = Food(x_bound=self.width-20, y_bound=self.height-20, 
+        self.food = Food(x_bound=self.width//2-20, y_bound=self.height//2-20, 
                          color=food_color)
 
         self.score = 0
-        # keep config and path (config still used for other settings)
-        self.config = config
-        self.config_path = config_path
-
+        self.running = False
+        self.penNote = turtle.Turtle()
+        self.penNote.hideturtle()
+        self.penNote.penup()
+        self.penNote.goto(0, 0)
+        
         # high score persisted in a plain text file at project root
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+        project_root = os.path.dirname(__file__)
         self.highscore_path = os.path.join(project_root, "highscore.txt")
+        print(f"High score path: {self.highscore_path}")
         try:
             if os.path.exists(self.highscore_path):
                 with open(self.highscore_path, "r", encoding="utf-8") as f:
@@ -57,7 +63,9 @@ class Game:
                 self.high_score = 0
         except Exception:
             self.high_score = 0
+        
         self._create_scoreboard()
+        self.paused = False
 
         # key bindings
         self.screen.listen()
@@ -65,6 +73,10 @@ class Game:
         self.screen.onkey(self.snake.down, "Down")
         self.screen.onkey(self.snake.left, "Left")
         self.screen.onkey(self.snake.right, "Right")
+        # now bind pause toggles
+        self.screen.onkey(self.toggle_pause, "space")
+        self.screen.onkey(self.toggle_pause, "p")
+
 
     def _create_scoreboard(self):
         self.pen = turtle.Turtle()
@@ -73,84 +85,95 @@ class Game:
         self.pen.color("white")
         self.pen.goto(0, self.height // 2 - 40)
         self._update_scoreboard()
-        # pause overlay pen (hidden by default)
-        self.pause_pen = turtle.Turtle()
-        self.pause_pen.hideturtle()
-        self.pause_pen.penup()
-        self.pause_pen.color("yellow")
-        self.pause_pen.goto(0, 0)
-        # now bind pause toggles
-        self.paused = False
-        self.screen.onkey(self.toggle_pause, "space")
-        self.screen.onkey(self.toggle_pause, "p")
-
+        
+        
     def _update_scoreboard(self):
+        if self.score > self.high_score:
+            self.high_score = self.score
         self.pen.clear()
         self.pen.write(f"Score: {self.score}  High Score: {self.high_score}", align="center", font=("Arial", 16, "normal"))
 
     def toggle_pause(self):
         """Toggle pause state. When paused, the main loop will show a PAUSED overlay and suspend updates."""
-        self.paused = not getattr(self, "paused", False)
+        self.paused = not self.paused
         if not self.paused:
-            try:
-                self.pause_pen.clear()
-            except Exception:
-                pass
+            self.penNote.clear()
+        else:
+            self.penNote.clear()
+            self.penNote.pencolor("yellow")
+            self.penNote.write("PAUSED", align="center", font=("Arial", 24, "bold"))
+        
 
+    def food_hit(self):
+        """count food items which snake head collides with, remove them, and return the count."""
+        eated = []
+        for idx in range(len(self.food.beans)-1, -1, -1):
+            bean, t = self.food.beans[idx]
+            if self.snake.head.distance(bean) < 15:
+                # collision
+                bean.hideturtle()
+                bean.clear()
+                del bean
+                eated.append(idx)
+        self.food.beans = [b for i, b in enumerate(self.food.beans) if i not in eated]
+        return len(eated)
+
+    def wall_collision(self):
+        """Check if snake head collides with wall."""
+        x, y = self.snake.head.xcor(), self.snake.head.ycor()
+        if x > self.width//2 - 10 or x < -self.width//2 + 10 or y > self.height//2 - 10 or y < -self.height//2 + 10:
+            print("Wall collision detected", x, y)
+            return True
+        return False
+    
     def run(self):
         try:
             while True:
                 self.screen.update()
                 if self.paused:
-                    try:
-                        self.pause_pen.clear()
-                        self.pause_pen.write("PAUSED", align="center", font=("Arial", 24, "bold"))
-                    except Exception:
-                        pass
                     time.sleep(0.1)
                     continue
-                else:
-                    try:
-                        self.pause_pen.clear()
-                    except Exception:
-                        pass
-
+                if self.running is False:
+                    self.running = True
+                    self.snake.reset()
+                    self.score = 0
+                    self._update_scoreboard()
+                    self.penNote.clear()
+                    self.food.clear()
+                    self.food.refresh(200)
+                    self.screen.update()
+                
                 self.snake.move()
-
-                # check collision with food
-                if self.snake.head.distance(self.food) < 15:
-                    self.food.refresh()
-                    self.snake.grow()
-                    self.score += 10
-                    if self.score > self.high_score:
-                        self.high_score = self.score
+ 
+                # food hit
+                count = self.food_hit()
+                if count > 0:
+                    self.snake.grow(count=count)
+                    self.score += 10 * count
                     self._update_scoreboard()
 
                 # check collisions with wall
-                x, y = self.snake.head.xcor(), self.snake.head.ycor()
-                if x > self.width//2 - 10 or x < -self.width//2 + 10 or y > self.height//2 - 10 or y < -self.height//2 + 10:
+                if self.wall_collision():
                     self._game_over()
+                    self.running = False
+                    self.paused = True
 
-                # check self collision
-                if self.snake.check_self_collision():
-                    self._game_over()
+                time.sleep(self.sleep)
 
-                time.sleep(self.delay)
         except (turtle.Terminator, tkinter.TclError):
             # Turtle's underlying Tk Canvas was closed/destroyed; exit cleanly.
-            pass
+            self._save_high_score()
 
     def _game_over(self):
         # Save high score on game over (simple exit-time persistence)
+        self.penNote.clear()
+        self.penNote.pencolor("red")
+        self.penNote.write("GAME OVER !", align="center", font=("Arial", 24, "bold"))
         try:
             self._save_high_score()
         except Exception:
             pass
 
-        # simple reset behavior
-        self.score = 0
-        self._update_scoreboard()
-        self.snake.reset()
 
     def _save_high_score(self):
         """Save current high score into `highscore.txt` at project root."""
@@ -158,7 +181,6 @@ class Game:
             with open(self.highscore_path, "w", encoding="utf-8") as f:
                 f.write(str(self.high_score))
         except Exception:
-            # ignore failures to avoid crashing game
             pass
 
 
