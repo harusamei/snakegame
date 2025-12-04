@@ -3,7 +3,6 @@ import tkinter
 import time
 import configparser
 import os
-import sys
 from snake import Snake
 from food import Food
 
@@ -109,7 +108,7 @@ class Game:
         eated = []
         for idx in range(len(self.food.beans)-1, -1, -1):
             bean, t = self.food.beans[idx]
-            if self.snake.head.distance(bean) < 15:
+            if self.snake.head.distance(bean) < 20:
                 # collision
                 bean.hideturtle()
                 bean.clear()
@@ -184,10 +183,27 @@ class Game:
             pass
 
 
+def periodic_refresh(game, interval=5):
+    """Periodically refresh food items on the screen."""
+    if not getattr(game, 'paused', False):
+        game.food.refresh(20)
+        print(f"Food refreshed, in {time.strftime('%H:%M:%S')}")
+    screen = game.screen
+    screen.ontimer(lambda: periodic_refresh(game, interval), interval * 1000)
+    
+def peridic_update(game, interval=5):
+    if not getattr(game, 'paused', False):
+        game.food.update()
+        print(f"Food updated, in {time.strftime('%H:%M:%S')}")
+    screen = game.screen
+    screen.ontimer(lambda: peridic_update(game, interval), interval * 1000)
+    
+
 def main():
     here = os.path.dirname(__file__)
     config_path = os.path.join(here, os.pardir, "config.ini")
     game = Game(config_path=config_path)
+    peridic_update(game)
     game.run()
 
 

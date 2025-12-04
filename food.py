@@ -44,10 +44,15 @@ class Food:
             else:
                 break
         # remove expired beans
+        removes =[]
         for idx in range(before + 1):
-            bean, t = self.beans.pop(0)
-            bean.hideturtle()
-            del bean
+            bean, t = self.beans[idx]
+            flag = random.random()
+            if flag < 0.5:
+                bean.hideturtle()
+                del bean
+                removes.append(idx)
+        self.beans = [b for i, b in enumerate(self.beans) if i not in removes]
 
     def clear(self):
         for bean, t in self.beans:
